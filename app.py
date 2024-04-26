@@ -1,36 +1,37 @@
-# text_preprocessing.py
+from node_nlp import NlpManager
 
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.preprocessing.text import Tokenizer
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-import pickle
+# Create an instance of NlpManager
+manager = NlpManager(languages=["en"])
 
-# Load the dataset
-df = pd.read_csv('restaurant_data.csv')
+# Add intents and examples to the NLP manager
+manager.addDocument("en", "How are you", "greeting")
+manager.addDocument("en", "who are you", "introduction")
+manager.addDocument("en", "what are you", "introduction")
+# Add more document additions here...
 
-# Split the dataset into training, validation, and test sets
-train_texts, test_texts, train_labels, test_labels = train_test_split(
-    df['text'], df['intent'], test_size=0.2, random_state=42)
-train_texts, val_texts, train_labels, val_labels = train_test_split(
-    train_texts, train_labels, test_size=0.2, random_state=42)
+async def main():
+    try:
+        await manager.load("model.nlp")
+        print("Model loaded successfully...")
+    except FileNotFoundError:
+        print("Model not found. Training model...")
+        await manager.train()
+        manager.save("model.nlp", True)
+        print("Model trained and saved.")
 
-# Tokenize the text data
-tokenizer = Tokenizer(oov_token='<OOV>')
-tokenizer.fit_on_texts(train_texts)
+# Set confidence threshold
+confidence_threshold = 0.9
 
-# Save the tokenizer for later use during inference
-with open('tokenizer.pickle', 'wb') as handle:
-    pickle.dump(tokenizer, handle, protocol=pickle.HIGHEST_PROTOCOL)
+# Function to extract intent from text
+async def extract_intent(text):
+    response = await manager.process("en", text)
+    intent = response['intent']
+    score = response['score']
+    if score < confidence_threshold:
+        return None
+    return intent
 
-# Convert text to sequences and pad them to ensure uniform length
-max_sequence_length = 100  # Choose an appropriate sequence length
-train_sequences = pad_sequences(tokenizer.texts_to_sequences(train_texts), maxlen=max_sequence_length)
-val_sequences = pad_sequences(tokenizer.texts_to_sequences(val_texts), maxlen=max_sequence_length)
-test_sequences = pad_sequences(tokenizer.texts_to_sequences(test_texts), maxlen=max_sequence_length)
-
-# Save preprocessed data
-with open('preprocessed_data.pickle', 'wb') as handle:
-    pickle.dump((train_sequences, train_labels, val_sequences, val_labels, test_sequences, test_labels), handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-print("Text preprocessing completed.")
+if __name__ == "__main__":
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
